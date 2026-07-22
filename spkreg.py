@@ -83,18 +83,9 @@ def match(emb: list, reg: dict, threshold: float) -> list:
     return scored
 
 
-# Опорные точки, замеренные на pyannote community-1: ниже SAME_FLOOR лежат
-# разные люди, выше SAME_CEIL — надёжно один и тот же. Проценты считаются
-# по этому диапазону, а не по всему [-1..1], иначе разные голоса выглядят
-# как 70%+ и число вводит в заблуждение.
-DIFF_CEIL = 0.45
-SAME_FLOOR = 0.95
-
-
 def as_percent(sim: float) -> int:
-    """Косинус → уверенность «тот же человек» в процентах."""
-    frac = (sim - DIFF_CEIL) / (SAME_FLOOR - DIFF_CEIL)
-    return max(0, min(100, round(frac * 100)))
+    """Косинус-близость → проценты как есть: 0.96 → 96%, 0.44 → 44%."""
+    return max(0, min(100, round(sim * 100)))
 
 
 # ------------------------------------------------------------------- команды
@@ -116,6 +107,46 @@ def cmd_enroll(args) -> None:
             sys.exit(
                 f"{label} нет в файле. Доступные: {', '.join(sorted(embeddings))}"
             )
+
+    # Защита от ошибки разметки. Пропускается при --force и на пустом реестре.
+    warnings = []
+    if not args.force and reg["speakers"]:
+        for label, name in pairs:
+            emb = embeddings[label]
+            if name in reg["speakers"]:
+                # Доразметка существующего: не подходит ли другой кандидат лучше?
+                self_sim = cosine(emb, reg["speakers"][name]["centroid"])
+                others = sorted(
+                    ((n, cosine(emb, e["centroid"]))
+                     for n, e in reg["speakers"].items() if n != name),
+                    key=lambda x: x[1], reverse=True,
+                )
+                if others and others[0][1] > self_sim:
+                    bn, bs = others[0]
+                    warnings.append(
+                        f"{label}={name}: голос ближе к «{bn}» ({as_percent(bs)}%), "
+                        f"чем к «{name}» ({as_percent(self_sim)}%) — возможно, не тот SPEAKER_XX."
+                    )
+            else:
+                # Новый человек: не дубль ли уже известного?
+                hits = [(n, s) for n, s in match(emb, reg, args.threshold)
+                        if s >= args.threshold]
+                if hits:
+                    lst = ", ".join(f"«{n}» ({as_percent(s)}%)" for n, s in hits)
+                    warnings.append(
+                        f"{label}={name}: новый спикер, но голос похож на {lst} — возможно, дубль."
+                    )
+
+    if warnings:
+        print("Похоже на ошибку разметки:")
+        for w in warnings:
+            print(f"  ⚠ {w}")
+        sys.exit(
+            "Ничего не добавлено. Проверь пары SPEAKER_XX=Имя "
+            "или повтори с --force, если всё верно."
+        )
+
+    for label, name in pairs:
         emb = embeddings[label]
         entry = reg["speakers"].setdefault(
             name, {"samples": [], "centroid": None, "sources": []}
@@ -180,7 +211,6 @@ def cmd_apply(args) -> None:
     if args.format == "json":
         for seg in data.get("segments", []):
             if "speaker" in seg:
-                seg["speaker_label"] = seg["speaker"]
                 seg["speaker"] = names.get(seg["speaker"], seg["speaker"])
         out = json.dumps(data, ensure_ascii=False, indent=2)
     else:
@@ -290,6 +320,14 @@ def main() -> None:
     e = sub.add_parser("enroll", help="запомнить голоса из размеченного файла")
     e.add_argument("result", help="JSON от whispermlx")
     e.add_argument("map", nargs="+", metavar="SPEAKER_XX=Имя")
+    e.add_argument(
+        "--threshold", type=float, default=DEFAULT_THRESHOLD,
+        help="общий порог близости (по умолчанию 0.70)",
+    )
+    e.add_argument(
+        "--force", action="store_true",
+        help="добавить, несмотря на предупреждение о вероятной ошибке разметки",
+    )
     e.set_defaults(func=cmd_enroll)
 
     i = sub.add_parser("identify", help="сопоставить спикеров с реестром")
@@ -306,7 +344,7 @@ def main() -> None:
     a = sub.add_parser("apply", help="подставить имена в транскрипт")
     a.add_argument("result")
     a.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
-    a.add_argument("-f", "--format", choices=["txt", "json"], default="txt")
+    a.add_argument("-f", "--format", choices=["txt", "json"], default="json")
     a.add_argument("-o", "--output")
     a.set_defaults(func=cmd_apply)
 
