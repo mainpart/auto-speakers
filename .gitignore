@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Локальные данные и результаты — не для репозитория
+registry.json
+*.json

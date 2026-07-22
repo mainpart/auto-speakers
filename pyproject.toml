@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auto-speakers"
+version = "0.1.0"
+description = "Recognise returning speakers across whispermlx diarizations from stored voice fingerprints"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "mainpart" }]
+keywords = ["diarization", "speaker-recognition", "whisper", "whispermlx", "mlx", "voice"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+[project.urls]
+Homepage = "https://github.com/mainpart/auto-speakers"
+Source = "https://github.com/mainpart/auto-speakers"
+
+[project.scripts]
+spkreg = "spkreg:main"
+
+[tool.setuptools]
+py-modules = ["spkreg"]
