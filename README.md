@@ -86,8 +86,9 @@ uv tool install git+https://github.com/mainpart/auto-speakers
 ```bash
 brew tap mainpart/auto-speakers https://github.com/mainpart/auto-speakers
 brew trust mainpart/auto-speakers
-brew install spkreg
+brew install --HEAD spkreg
 ```
+Обновить до свежей версии: `brew upgrade --fetch-HEAD spkreg`.
 
 ## Как пользоваться
 
